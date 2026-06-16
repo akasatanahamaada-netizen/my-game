@@ -116,11 +116,11 @@ function applyGravity(grid, grav) {
       const below = grid[ny][nx];
 
       const canFall = (below === T.EMPTY)
-        || (below === T.ICE)
-        || (below === T.KEY && type === T.PLAYER)
-        || (below === T.GOAL && type === T.PLAYER)
-        || (below === T.MUSHROOM && type === T.PLAYER);
-
+  　　　|| (below === T.ICE)
+  　　　|| (below === T.KEY && type === T.PLAYER)
+  　　　|| (below === T.GOAL && type === T.PLAYER && state.hasKey)
+  　　　|| (below === T.MUSHROOM && type === T.PLAYER);
+      
       if (canFall) {
         if (below === T.KEY && type === T.PLAYER) state.hasKey = true;
         grid[ny][nx] = type;
@@ -140,7 +140,7 @@ function applyGravity(grid, grav) {
         moved = true;
       }
 
-      if (below === T.GOAL && type === T.PLAYER) {
+      if (below === T.GOAL && type === T.PLAYER && state.hasKey)  {
         state.won = true;
       }
     }
@@ -192,7 +192,7 @@ function checkGoal() {
     return p.x === s.doorTarget.x && p.y === s.doorTarget.y;
   }
   const cell = state.grid[p.y][p.x];
-  return cell === T.GOAL || state.won;
+　return (cell === T.GOAL && state.hasKey) || state.won;
 }
 
 function undoMove() {
