@@ -137,6 +137,7 @@ function applyGravity(grid, grav) {
         grid[ny][nx] = T.PLAYER;
         grid[pos.y][pos.x] = T.EMPTY;
         state.playerPos = { x: nx, y: ny };
+        state.won = true;
         moved = true;
       }
 
