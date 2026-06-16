@@ -72,7 +72,6 @@ function loadStage(idx) {
 }
 
 function fitCanvas() {
-  const canvas = document.getElementById('gameCanvas');
   const maxW = window.innerWidth  - 32;
   const maxH = window.innerHeight - 80;
   const cellW = Math.floor(maxW / state.cols);
@@ -268,7 +267,6 @@ function showVictory() {
 //  Particle system
 // ================================================================
 function spawnGravParticles(dir) {
-  const canvas = document.getElementById('gameCanvas');
   const d = DIRS[dir];
   for (let i = 0; i < 18; i++) {
     const cx = Math.random() * canvas.width;

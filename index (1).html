@@ -44,6 +44,14 @@
     </div>
     <div id="titleParticles"></div>
   </div>
-  <script src="game.js"></script>
+  <!--
+    読み込み順序（依存関係）:
+      1. levels.js   — T, DIRS, STAGES を定義（他の全ファイルが参照）
+      2. renderer.js — canvas / ctx / render 系を定義（logic.js が呼び出す）
+      3. logic.js    — state / gameLoop など。levels & renderer に依存
+  -->
+  <script src="levels.js"></script>
+  <script src="renderer.js"></script>
+  <script src="logic.js"></script>
 </body>
 </html>
