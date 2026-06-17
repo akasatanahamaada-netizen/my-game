@@ -239,6 +239,31 @@ function drawPlayer(cs) {
   const s = STAGES[state.stage];
   const pal = s.palette;
 
+  ctx.save();
+
+  // プレイヤー中心を回転軸にする
+  ctx.translate(cs / 2, cs / 2);
+
+  let angle = 0;
+
+  switch (state.gravity) {
+    case 'DOWN':
+      angle = 0;
+      break;
+    case 'UP':
+      angle = Math.PI;
+      break;
+    case 'LEFT':
+      angle = Math.PI / 2;
+      break;
+    case 'RIGHT':
+      angle = -Math.PI / 2;
+      break;
+  }
+
+  ctx.rotate(angle);
+  ctx.translate(-cs / 2, -cs / 2);
+
   ctx.shadowColor = pal.glow;
   ctx.shadowBlur = 16;
 
@@ -284,6 +309,7 @@ function drawPlayer(cs) {
   }
 
   ctx.shadowBlur = 0;
+  ctx.restore();
 }
 
 // ================================================================
