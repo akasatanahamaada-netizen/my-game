@@ -9,6 +9,7 @@ const ctx = canvas.getContext('2d');
 
 // ── アニメーション用タイマー ──
 let time = 0;
+let playerRotation = 0;
 
 // ── セル色定義 ──
 const CELL_COLORS = {
@@ -244,24 +245,16 @@ function drawPlayer(cs) {
   // プレイヤー中心を回転軸にする
   ctx.translate(cs / 2, cs / 2);
 
-  let angle = 0;
+  const targetRot = {
+    DOWN: 0,
+    RIGHT: -Math.PI / 2,
+    UP: Math.PI,
+    LEFT: Math.PI / 2
+  }[state.gravity];
 
-  switch (state.gravity) {
-    case 'DOWN':
-      angle = 0;
-      break;
-    case 'UP':
-      angle = Math.PI;
-      break;
-    case 'LEFT':
-      angle = Math.PI / 2;
-      break;
-    case 'RIGHT':
-      angle = -Math.PI / 2;
-      break;
-  }
+  playerRotation += (targetRot - playerRotation) * 0.15;
 
-  ctx.rotate(angle);
+  ctx.rotate(playerRotation);
   ctx.translate(-cs / 2, -cs / 2);
 
   ctx.shadowColor = pal.glow;
