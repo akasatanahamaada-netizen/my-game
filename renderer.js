@@ -1018,41 +1018,46 @@ function drawIceWall(cs, dark){
 
   ctx.stroke();
 
-  // 雪の結晶（固定配置）
-  const flakes = [
-    [0.25,0.75],
-    [0.75,0.20],
-    [0.70,0.78]
-  ];
+  // 氷のステンドグラス
 
-  flakes.forEach(f=>{
+  const glass = ctx.createLinearGradient(
+    0,
+    cs*0.25,
+    0,
+    cs*0.75
+  );
 
-    const x = cs*f[0];
-    const y = cs*f[1];
-    const r = cs*0.05;
+  glass.addColorStop(0,"#ffffff");
+  glass.addColorStop(1,"#93c5fd");
 
-    ctx.strokeStyle =
-      dark ? "#dbeafe" : "#ffffff";
+  ctx.fillStyle = glass;
 
-    ctx.lineWidth = 1;
+  ctx.beginPath();
 
-    ctx.beginPath();
+  ctx.moveTo(cs*0.50, cs*0.18);
+  ctx.lineTo(cs*0.72, cs*0.50);
+  ctx.lineTo(cs*0.50, cs*0.82);
+  ctx.lineTo(cs*0.28, cs*0.50);
 
-    ctx.moveTo(x-r,y);
-    ctx.lineTo(x+r,y);
+  ctx.closePath();
+  ctx.fill();
 
-    ctx.moveTo(x,y-r);
-    ctx.lineTo(x,y+r);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2;
 
-    ctx.moveTo(x-r*0.7,y-r*0.7);
-    ctx.lineTo(x+r*0.7,y+r*0.7);
+  ctx.stroke();
 
-    ctx.moveTo(x+r*0.7,y-r*0.7);
-    ctx.lineTo(x-r*0.7,y+r*0.7);
+  // 窓の十字
 
-    ctx.stroke();
+  ctx.beginPath();
 
-  });
+  ctx.moveTo(cs*0.50, cs*0.22);
+  ctx.lineTo(cs*0.50, cs*0.78);
+
+  ctx.moveTo(cs*0.34, cs*0.50);
+  ctx.lineTo(cs*0.66, cs*0.50);
+
+  ctx.stroke();
 
   // 氷の宝石
   ctx.fillStyle =
@@ -1064,6 +1069,27 @@ function drawIceWall(cs, dark){
   ctx.lineTo(cs*0.58, cs*0.25);
   ctx.lineTo(cs*0.50, cs*0.35);
   ctx.lineTo(cs*0.42, cs*0.25);
+
+  ctx.closePath();
+  ctx.fill();
+
+  // 氷の尖塔
+  ctx.fillStyle = "#e0f2fe";
+
+  ctx.beginPath();
+
+  ctx.moveTo(cs*0.15, cs*0.20);
+  ctx.lineTo(cs*0.22, cs*0.05);
+  ctx.lineTo(cs*0.29, cs*0.20);
+
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+
+  ctx.moveTo(cs*0.85, cs*0.20);
+  ctx.lineTo(cs*0.78, cs*0.05);
+  ctx.lineTo(cs*0.71, cs*0.20);
 
   ctx.closePath();
   ctx.fill();
