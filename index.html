@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>重力迷宮パズルメーカー</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: #1e293b;
+      --accent: #38bdf8;
+      --text: #f8fafc;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+    /* 全体レイアウト */
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+    /* ヘッダー・モード切り替え */
+    header {
+      background: #0b0f19;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #334155;
+      z-index: 10;
+    }
+    .logo {
+      font-size: 20px;
+      font-weight: bold;
+      color: var(--accent);
+    }
+    .mode-selector button {
+      background: #334155;
+      color: var(--text);
+      border: none;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: bold;
+      border-radius: 4px;
+      margin-left: 10px;
+    }
+    .mode-selector button.active {
+      background: var(--accent);
+      color: #000;
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    /* ワークスペース */
+    #workspace {
+      display: flex;
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 左側：エディット用ツールパネル */
+    #edit-panel {
+      width: 280px;
+      background: var(--panel-bg);
+      border-right: 2px solid #334155;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      box-sizing: border-box;
+      z-index: 5;
+      overflow-y: auto;
+    }
+    .panel-section {
+      background: #111827;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+    }
+    .panel-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    /* パレット */
+    .palette-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .palette-btn {
+      position: relative;
+      background: #334155;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      color: white;
+    }
+    .palette-btn:hover { background: #475569; }
+    .palette-btn.active {
+      border-color: var(--accent);
+      background: #0284c7;
+    }
+    .palette-btn span { font-size: 9px; margin-top: 2px; color: #cbd5e1; }
+
+    /* ツールチップ（説明ポップアップ）のスタイル */
+    .palette-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 115%; /* ボタンの上側に配置 */
+      left: 50%;
+      transform: translateX(-50%) translateY(5px); /* 中央寄せ＆少し下にずらしておく */
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid var(--accent);
+      padding: 6px 10px;
+      font-size: 11px;
+      border-radius: 4px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 99;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .palette-btn:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0); /* ふわっと上に浮き出る */
+    }
+
+    /* メインキャンバスエリア */
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #090d16;
+    }
+    canvas {
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      cursor: crosshair;
+    }
+
+    /* プレイ用HUD (プレイモード時のみ上部に浮かせる) */
+    #play-hud {
+      position: absolute;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      padding: 8px 20px;
+      border-radius: 30px;
+      border: 1px solid var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-item { font-weight: bold; font-size: 14px; }
+    #gravArrow { display: inline-block; transition: transform 0.2s ease; font-size: 18px; color: var(--accent); }
+
+    /* 汎用コントロールパーツ */
+    label { display: block; font-size: 13px; margin-bottom: 5px; }
+    select, input[type="number"], textarea {
+      width: 100%;
+      background: #334155;
+      border: 1px solid #475569;
+      color: white;
+      padding: 6px;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button.action-btn {
+      width: 100%;
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 8px;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+    button.action-btn:hover { background: #0369a1; }
+
+    /* ポップアップ/オーバーレイ */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .overlay-content {
+      background: var(--panel-bg);
+      padding: 25px;
+      border-radius: 8px;
+      border: 2px solid var(--accent);
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div id="app-container">
+  <header>
+    <div class="logo">重力迷宮パズルメーカー 🛠️</div>
+    <div class="mode-selector">
+      <button id="btn-edit-mode" class="active" onclick="switchMode('EDIT')">エディットモード (作る)</button>
+      <button id="btn-play-mode" onclick="switchMode('PLAY')">テストプレイ (試す)</button>
+    </div>
+  </header>
+
+  <div id="workspace">
+    
+    <div id="edit-panel">
+      <div class="panel-section">
+        <div class="panel-title">1. タイルを配置</div>
+        <div class="palette-grid" id="palette">
+          </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">2. ステージのサイズ</div>
+        <div style="display: flex; gap: 10px;">
+          <div>
+            <label>横幅 (列)</label>
+            <input type="number" id="input-cols" min="5" max="30" value="12" onchange="resizeGrid()">
+          </div>
+          <div>
+            <label>縦幅 (行)</label>
+            <input type="number" id="input-rows" min="5" max="20" value="9" onchange="resizeGrid()">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">3. グラフィックテーマ</div>
+        <label>見た目の世界観</label>
+        <select id="select-theme" onchange="changeTheme()">
+          <option value="0">Ch.1 赤ずきんの森 (木・苔)</option>
+          <option value="1">Ch.2 ラプンツェルの塔 (石レンガ)</option>
+          <option value="2">Ch.3 菓子の家 (クッキー)</option>
+          <option value="3">Ch.4 シンデレラ牢獄 (大理石)</option>
+          <option value="4">Ch.5 雪の女王宮殿 (氷結晶)</option>
+        </select>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">4. シェア & 保存</div>
+        <button class="action-btn" onclick="exportStage()">ステージコードをコピー</button>
+        <div style="margin-top: 10px;">
+          <label>コードを読み込む</label>
+          <textarea id="textarea-import" rows="2" placeholder="ここにコードを貼り付け"></textarea>
+          <button class="action-btn" style="background:#10b981" onclick="importStage()">読み込み適用</button>
+        </div>
+      </div>
+      
+      <div style="font-size: 11px; color:#94a3b8; line-height: 1.4;">
+        【操作方法】<br>
+        ・配置：パレットを選んで画面をドラッグ<br>
+        ・テスト中の重力：[矢印キー] または [WASD]<br>
+        ・テストやり直し：[R]キー / 戻す：[Z]キー
+      </div>
+    </div>
+
+    <div id="canvas-container">
+      <div id="play-hud" class="hidden">
+        <div class="hud-item" id="hud-stage-name">⭐ テストステージ</div>
+        <div class="hud-item" id="hud-moves">moves: 0</div>
+        <div class="hud-item">重力方向: <span id="gravArrow">↓</span></div>
+      </div>
+      
+      <canvas id="gameCanvas"></canvas>
+    </div>
+
+  </div>
+</div>
+
+<div id="overlay" class="hidden">
+  <div class="overlay-content">
+    <h2 id="overlayTitle">タイトル</h2>
+    <p id="overlayText">メッセージ内容</p>
+    <button class="action-btn" id="overlayBtn" onclick="closeOverlay()">閉じる</button>
+  </div>
+</div>
+
+<script>
+// ================================================================
+//  データ定義
+// ================================================================
+const T = {
+  EMPTY: 0, WALL: 1, PLAYER: 2, BOX: 3,
+  KEY: 4,   DOOR: 5, SPIKE: 6,  ICE: 7,
+  GOAL: 8,  DARK_WALL: 9,
+};
+
+const T_INFO = {
+  [T.EMPTY]:     { name: '消しゴム', icon: '⬜', desc: '配置したオブジェクトを消去します' },
+  [T.WALL]:      { name: '通常壁',   icon: '🧱', desc: 'プレイヤーや木箱を遮る絶対的な壁' },
+  [T.DARK_WALL]: { name: '魔法壁',   icon: '🔮', desc: 'テーマごとの魔法の装飾壁' },
+  [T.PLAYER]:    { name: '始点',     icon: '🚶', desc: 'プレイヤーの開始位置（1つのみ）' },
+  [T.BOX]:       { name: '木箱',     icon: '📦', desc: '重力で落下する。足場やトゲ避けに' },
+  [T.KEY]:       { name: '鍵',       icon: '🔑', desc: '扉を開けたり、星を取るのに必要' },
+  [T.DOOR]:      { name: '扉',       icon: '🚪', desc: '鍵を持っていると開く脱出用ゴール' },
+  [T.SPIKE]:     { name: 'トゲ',     icon: '🔺', desc: 'プレイヤーが触れると即ゲームオーバー' },
+  [T.ICE]:       { name: '氷の床',   icon: '🧊', desc: '重力がかかると上を滑る床' },
+  [T.GOAL]:      { name: 'ゴール',   icon: '⭐', desc: '鍵を持った状態で触れるとステージクリア' },
+};
+
+const DIRS = {
+  DOWN:  { dx: 0,  dy: 1,  arrow: '↓', rot: 0   },
+  UP:    { dx: 0,  dy: -1, arrow: '↑', rot: 180 },
+  LEFT:  { dx: -1, dy: 0,  arrow: '←', rot: 90  },
+  RIGHT: { dx: 1,  dy: 0,  arrow: '→', rot: 270 },
+};
+
+const THEMES = [
+  { name: '赤ずきんの森', palette: { bg: '#0d1a0d', wall: '#2d5a1b', dark: '#1a3d0e', accent: '#7fff4f', glow: '#4ade80' } },
+  { name: 'ラプンツェルの塔', palette: { bg: '#0d0a1a', wall: '#4a2f7a', dark: '#2d1654', accent: '#d946ef', glow: '#e879f9' } },
+  { name: '菓子の家', palette: { bg: '#1a0a0a', wall: '#7a2020', dark: '#4a1010', accent: '#fb923c', glow: '#fbbf24' } },
+  { name: 'シンデレラ牢獄', palette: { bg: '#0a0d1a', wall: '#1e3a5f', dark: '#0f2040', accent: '#60a5fa', glow: '#93c5fd' } },
+  { name: '雪の女王宮殿', palette: { bg: '#05101a', wall: '#1e4a6a', dark: '#0a2a40', accent: '#7dd3fc', glow: '#bae6fd' } }
+];
+
+// ================================================================
+//  アプリケーション状態管理
+// ================================================================
+let appMode = 'EDIT'; 
+let selectedTile = T.WALL;
+let currentThemeIdx = 0;
+
+let editGrid = [];
+let savedGridForReset = []; 
+
+let state = {
+  grid: [],
+  rows: 0, cols: 0,
+  playerPos: { x: 0, y: 0 },
+  gravity: 'DOWN',
+  hasKey: false,
+  moves: 0,
+  history: [],
+  cellSize: 45,
+  particles: [],
+  shakeTime: 0,
+  gameOver: false,
+  won: false,
+  stage: 0 
+};
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let time = 0;
+let playerRotation = 0;
+let isDrawing = false; 
+
+// ================================================================
+//  初期化処理
+// ================================================================
+window.onload = () => {
+  buildPaletteUI();
+  setupInitialGrid(12, 9);
+  switchMode('EDIT');
+  
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', doDraw);
+  window.addEventListener('mouseup', endDraw);
+  
+  canvas.addEventListener('touchstart', (e) => { startDraw(e.touches[0]); }, {passive:false});
+  canvas.addEventListener('touchmove', (e) => { doDraw(e.touches[0]); e.preventDefault(); }, {passive:false});
+  window.addEventListener('touchend', endDraw);
+
+  setInterval(tick, 1000 / 60);
+};
+
+function buildPaletteUI() {
+  const paletteDiv = document.getElementById('palette');
+  paletteDiv.innerHTML = '';
+  for (const [typeStr, info] of Object.entries(T_INFO)) {
+    const type = parseInt(typeStr);
+    const btn = document.createElement('button');
+    btn.className = `palette-btn ${type === selectedTile ? 'active' : ''}`;
+    btn.id = `palette-t-${type}`;
+    btn.innerHTML = `${info.icon}<span>${info.name}</span>`;
+    // マウスホバー用の説明テキストを属性としてセット
+    btn.setAttribute('data-tooltip', `${info.name}: ${info.desc}`);
+    btn.onclick = () => selectPalette(type);
+    paletteDiv.appendChild(btn);
+  }
+}
+
+function selectPalette(type) {
+  selectedTile = type;
+  document.querySelectorAll('.palette-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`palette-t-${type}`).classList.add('active');
+}
+
+function setupInitialGrid(c, r) {
+  document.getElementById('input-cols').value = c;
+  document.getElementById('input-rows').value = r;
+  editGrid = [];
+  for (let y = 0; y < r; y++) {
+    const row = [];
+    for (let x = 0; x < c; x++) {
+      if (x === 0 || x === c - 1 || y === 0 || y === r - 1) row.push(T.WALL);
+      else row.push(T.EMPTY);
+    }
+    editGrid.push(row);
+  }
+  fitCanvas(c, r);
+}
+
+function resizeGrid() {
+  if (appMode !== 'EDIT') return;
+  const newCols = parseInt(document.getElementById('input-cols').value) || 10;
+  const newRows = parseInt(document.getElementById('input-rows').value) || 8;
+  
+  const newGrid = [];
+  for (let y = 0; y < newRows; y++) {
+    const row = [];
+    for (let x = 0; x < newCols; x++) {
+      if (editGrid[y] && editGrid[y][x] !== undefined) {
+        // サイズ変更時も、外周になる部分は自動的に壁にする
+        if (x === 0 || x === newCols - 1 || y === 0 || y === newRows - 1) {
+          row.push(T.WALL);
+        } else {
+          row.push(editGrid[y][x]);
+        }
+      } else {
+        if (x === 0 || x === newCols - 1 || y === 0 || y === newRows - 1) row.push(T.WALL);
+        else row.push(T.EMPTY);
+      }
+    }
+    newGrid.push(row);
+  }
+  editGrid = newGrid;
+  fitCanvas(newCols, newRows);
+}
+
+function changeTheme() {
+  currentThemeIdx = parseInt(document.getElementById('select-theme').value);
+  state.stage = currentThemeIdx;
+}
+
+function fitCanvas(cols, rows) {
+  const maxW = window.innerWidth - (appMode === 'EDIT' ? 320 : 60);
+  const maxH = window.innerHeight - 100;
+  const cellW = Math.floor(maxW / cols);
+  const cellH = Math.floor(maxH / rows);
+  state.cellSize = Math.max(24, Math.min(56, Math.min(cellW, cellH)));
+  
+  canvas.width = cols * state.cellSize;
+  canvas.height = rows * state.cellSize;
+}
+
+// ================================================================
+//  モード切り替え (EDIT ↔ PLAY)
+// ================================================================
+function switchMode(mode) {
+  appMode = mode;
+  if (mode === 'EDIT') {
+    document.getElementById('btn-edit-mode').className = 'active';
+    document.getElementById('btn-play-mode').className = '';
+    document.getElementById('edit-panel').style.display = 'flex';
+    document.getElementById('play-hud').classList.add('hidden');
+    
+    if (savedGridForReset.length > 0) {
+      editGrid = deepCopy(savedGridForReset);
+    }
+    fitCanvas(editGrid[0].length, editGrid.length);
+  } else {
+    const players = findAll(editGrid, T.PLAYER);
+    const goals = findAll(editGrid, T.GOAL);
+    const doors = findAll(editGrid, T.DOOR);
+    
+    if (players.length === 0) {
+      showOverlay('⚠️ プレイ不可', 'ステージ内に「始点(🚶)」を1つ配置してください。', '閉じる');
+      switchMode('EDIT');
+      return;
+    }
+    if (goals.length === 0 && doors.length === 0) {
+      showOverlay('⚠️ プレイ不可', '「ゴール(⭐)」または「扉(🚪)」を配置してください。', '閉じる');
+      switchMode('EDIT');
+      return;
+    }
+
+    document.getElementById('btn-edit-mode').className = '';
+    document.getElementById('btn-play-mode').className = 'active';
+    document.getElementById('edit-panel').style.display = 'none';
+    document.getElementById('play-hud').classList.remove('hidden');
+    
+    savedGridForReset = deepCopy(editGrid);
+    startPlaySession();
+  }
+}
+
+function startPlaySession() {
+  state.grid = deepCopy(savedGridForReset);
+  state.rows = state.grid.length;
+  state.cols = state.grid[0].length;
+  state.gravity = 'DOWN';
+  state.hasKey = false;
+  state.moves = 0;
+  state.history = [];
+  state.particles = [];
+  state.gameOver = false;
+  state.won = false;
+  state.stage = currentThemeIdx;
+  
+  const p = findOne(state.grid, T.PLAYER);
+  state.playerPos = { x: p.x, y: p.y };
+  
+  fitCanvas(state.cols, state.rows);
+  updateHUD();
+  updateGravArrow(true);
+}
+
+function updateHUD() {
+  document.getElementById('hud-stage-name').textContent = `🏰 ${THEMES[currentThemeIdx].name} (テスト)`;
+  document.getElementById('hud-moves').textContent = `moves: ${state.moves}`;
+}
+
+function updateGravArrow(instant) {
+  const el = document.getElementById('gravArrow');
+  const arrowChars = { DOWN: '↓', UP: '↑', LEFT: '←', RIGHT: '→' };
+  const arrowRots = { DOWN: 0, UP: 180, LEFT: 90, RIGHT: 270 };
+  el.textContent = arrowChars[state.gravity];
+  if (!instant) {
+    el.style.transform = `rotate(${arrowRots[state.gravity]}deg) scale(1.4)`;
+    setTimeout(() => { el.style.transform = `rotate(${arrowRots[state.gravity]}deg) scale(1)`; }, 200);
+  }
+}
+
+// ================================================================
+//  エディター上のマウス描画ロジック
+// ================================================================
+function getGridCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.clientX;
+  const clientY = e.clientY;
+  const x = Math.floor((clientX - rect.left) / state.cellSize);
+  const y = Math.floor((clientY - rect.top) / state.cellSize);
+  return { x, y };
+}
+
+function startDraw(e) {
+  if (appMode !== 'EDIT') return;
+  isDrawing = true;
+  doDraw(e);
+}
+
+function doDraw(e) {
+  if (!isDrawing || appMode !== 'EDIT') return;
+  const pos = getGridCoords(e);
+  const cols = editGrid[0].length;
+  const rows = editGrid.length;
+  
+  if (pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows) {
+    // 最外周（一番外側の壁）の位置なら変更を禁止してリターンする
+    if (pos.x === 0 || pos.x === cols - 1 || pos.y === 0 || pos.y === rows - 1) {
+      return; 
+    }
+
+    if (selectedTile === T.PLAYER) {
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (editGrid[y][x] === T.PLAYER) editGrid[y][x] = T.EMPTY;
+        }
+      }
+    }
+    editGrid[pos.y][pos.x] = selectedTile;
+  }
+}
+
+function endDraw() { isDrawing = false; }
+
+// ================================================================
+//  物理・ゲーム判定ロジック
+// ================================================================
+function deepCopy(g) { return g.map(r => [...r]); }
+function findAll(grid, type) {
+  const res = [];
+  for (let y = 0; y < grid.length; y++)
+    for (let x = 0; x < grid[y].length; x++)
+      if (grid[y][x] === type) res.push({ x, y });
+  return res;
+}
+function findOne(grid, type) { return findAll(grid, type)[0] || null; }
+
+function applyGravity(grid, grav) {
+  const dir = DIRS[grav];
+  let moved = true;
+  let iterations = 0;
+  while (moved && iterations < 200) {
+    moved = false;
+    iterations++;
+    const moveables = findAll(grid, T.PLAYER).concat(findAll(grid, T.BOX));
+    moveables.sort((a, b) => {
+      const ax = dir.dx !== 0 ? a.x * dir.dx : a.y * dir.dy;
+      const bx = dir.dx !== 0 ? b.x * dir.dx : b.y * dir.dy;
+      return bx - ax;
+    });
+
+    for (const pos of moveables) {
+      const type = grid[pos.y][pos.x];
+      const nx = pos.x + dir.dx;
+      const ny = pos.y + dir.dy;
+
+      if (nx < 0 || nx >= grid[0].length || ny < 0 || ny >= grid.length) continue;
+      const below = grid[ny][nx];
+
+      const canFall = (below === T.EMPTY)
+        || (below === T.ICE)
+        || (below === T.KEY && type === T.PLAYER)
+        || (below === T.GOAL && type === T.PLAYER && state.hasKey);
+      
+      if (canFall) {
+        if (below === T.KEY && type === T.PLAYER) state.hasKey = true;
+        grid[ny][nx] = type;
+        grid[pos.y][pos.x] = T.EMPTY;
+        if (type === T.PLAYER) state.playerPos = { x: nx, y: ny };
+        moved = true;
+      }
+
+      if (below === T.SPIKE && type === T.PLAYER) {
+        state.gameOver = true;
+      }
+
+      if (below === T.DOOR && type === T.PLAYER && state.hasKey) {
+        grid[ny][nx] = T.PLAYER;
+        grid[pos.y][pos.x] = T.EMPTY;
+        state.playerPos = { x: nx, y: ny };
+        state.won = true;
+        moved = true;
+      }
+
+      if (below === T.GOAL && type === T.PLAYER && state.hasKey)  {
+        state.won = true;
+      }
+    }
+  }
+  const currentCell = grid[state.playerPos.y][state.playerPos.x];
+  if (currentCell === T.GOAL && state.hasKey) state.won = true;
+  return grid;
+}
+
+function changeGravity(dir) {
+  if (state.gameOver || state.won || appMode !== 'PLAY') return;
+
+  state.history.push({
+    grid: deepCopy(state.grid),
+    playerPos: { ...state.playerPos },
+    gravity: state.gravity,
+    hasKey: state.hasKey,
+    moves: state.moves,
+  });
+  if (state.history.length > 50) state.history.shift();
+
+  state.gravity = dir;
+  state.moves++;
+
+  const oldP = findOne(state.grid, T.PLAYER);
+  if (oldP && (oldP.x !== state.playerPos.x || oldP.y !== state.playerPos.y)) {
+    state.grid[oldP.y][oldP.x] = T.EMPTY;
+    state.grid[state.playerPos.y][state.playerPos.x] = T.PLAYER;
+  }
+
+  state.grid = applyGravity(state.grid, dir);
+  updateHUD();
+  updateGravArrow(false);
+  spawnGravParticles(dir);
+
+  if (state.gameOver) {
+    state.shakeTime = 20;
+    setTimeout(() => showOverlay('💀 やられた…', 'トゲに触れてしまいました。[R]キーでリトライ可能です。', 'もう一度'), 300);
+  } else if (state.won) {
+    setTimeout(() => showOverlay('🎉 脱出成功！', 'あなたが作ったステージをクリアしました！バグなくクリア可能ですね！', 'やった！'), 400);
+  }
+}
+
+function undoMove() {
+  if (state.history.length === 0) return;
+  const h = state.history.pop();
+  state.grid = h.grid;
+  state.playerPos = h.playerPos;
+  state.gravity = h.gravity;
+  state.hasKey = h.hasKey;
+  state.moves = h.moves;
+  state.gameOver = false;
+  state.won = false;
+  updateHUD();
+  updateGravArrow(false);
+}
+
+// ================================================================
+//  入力ハンドラ
+// ================================================================
+document.addEventListener('keydown', e => {
+  if (appMode !== 'PLAY') return;
+  switch (e.key) {
+    case 'ArrowDown':  case 's': case 'S': changeGravity('DOWN');  e.preventDefault(); break;
+    case 'ArrowUp':    case 'w': case 'W': changeGravity('UP');    e.preventDefault(); break;
+    case 'ArrowLeft':  case 'a': case 'A': changeGravity('LEFT');  e.preventDefault(); break;
+    case 'ArrowRight': case 'd': case 'D': changeGravity('RIGHT'); e.preventDefault(); break;
+    case 'r': case 'R': startPlaySession(); break;
+    case 'z': case 'Z': undoMove(); break;
+  }
+});
+
+// ================================================================
+//  シェア・保存のインポート＆エクスポートロジック
+// ================================================================
+function exportStage() {
+  const stageData = {
+    theme: currentThemeIdx,
+    grid: editGrid
+  };
+  const jsonStr = JSON.stringify(stageData);
+  const code = btoa(unescape(encodeURIComponent(jsonStr)));
+  
+  const tx = document.getElementById('textarea-import');
+  tx.value = code;
+  tx.select();
+  navigator.clipboard.writeText(code).then(() => {
+    showOverlay('📋 コードをコピーしました！', 'クリップボードにステージコードを保存しました。このテキストをSNSや友達に共有してください。', 'OK');
+  });
+}
+
+function importStage() {
+  const code = document.getElementById('textarea-import').value.trim();
+  if (!code) return;
+  try {
+    const jsonStr = decodeURIComponent(escape(atob(code)));
+    const stageData = JSON.parse(jsonStr);
+    
+    if (stageData.theme !== undefined && Array.isArray(stageData.grid)) {
+      currentThemeIdx = stageData.theme;
+      document.getElementById('select-theme').value = currentThemeIdx;
+      editGrid = stageData.grid;
+      
+      const c = editGrid[0].length;
+      const r = editGrid.length;
+      document.getElementById('input-cols').value = c;
+      document.getElementById('input-rows').value = r;
+      
+      switchMode('EDIT');
+      fitCanvas(c, r);
+      showOverlay('✨ 読み込み成功', 'ステージデータを復元しました！テストプレイで遊んでみましょう。', '開始');
+    } else {
+      throw new Error();
+    }
+  } catch (e) {
+    showOverlay('❌ エラー', '正しいステージコードではありません。コピーされた文字列が完全か確認してください。', '確認');
+  }
+}
+
+// ================================================================
+//  ポップアップ制御
+// ================================================================
+function showOverlay(title, text, btnText) {
+  document.getElementById('overlayTitle').textContent = title;
+  document.getElementById('overlayText').textContent = text;
+  document.getElementById('overlayBtn').textContent = btnText;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function closeOverlay() {
+  document.getElementById('overlay').classList.add('hidden');
+}
+
+// ================================================================
+//  パーティクルシステム
+// ================================================================
+function spawnGravParticles(dir) {
+  const d = DIRS[dir];
+  for (let i = 0; i < 15; i++) {
+    state.particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: d.dx * (2 + Math.random() * 4),
+      vy: d.dy * (2 + Math.random() * 4),
+      life: 1.0, decay: 0.05, size: 2 + Math.random() * 4,
+      color: `hsl(${280 + Math.random() * 60}, 90%, 70%)`
+    });
+  }
+}
+function updateParticles() {
+  state.particles = state.particles.filter(p => {
+    p.x += p.vx; p.y += p.vy; p.life -= p.decay;
+    return p.life > 0;
+  });
+}
+
+// ================================================================
+//  メインループ & レンダー
+// ================================================================
+function tick() {
+  time++;
+  updateParticles();
+  
+  const currentGrid = (appMode === 'EDIT') ? editGrid : state.grid;
+  const pal = THEMES[currentThemeIdx].palette;
+  const cs = state.cellSize;
+  
+  ctx.fillStyle = pal.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  ctx.strokeStyle = appMode === 'EDIT' ? 'rgba(255,255,255,0.08)' : pal.wall + '22';
+  ctx.lineWidth = 0.5;
+  for (let y = 0; y < currentGrid.length; y++) {
+    for (let x = 0; x < currentGrid[0].length; x++) {
+      ctx.strokeRect(x * cs, y * cs, cs, cs);
+    }
+  }
+
+  let shakeX = 0, shakeY = 0;
+  if (state.shakeTime > 0 && appMode === 'PLAY') {
+    shakeX = (Math.random() - 0.5) * 6;
+    shakeY = (Math.random() - 0.5) * 6;
+    state.shakeTime--;
+  }
+
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+
+  for (let y = 0; y < currentGrid.length; y++) {
+    for (let x = 0; x < currentGrid[0].length; x++) {
+      drawCell(x, y, currentGrid[y][x], cs);
+    }
+  }
+  ctx.restore();
+
+  if (appMode === 'PLAY') {
+    for (const p of state.particles) {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ================================================================
+//  セル描画
+// ================================================================
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+}
+
+function drawCell(x, y, type, cs) {
+  if (type === T.EMPTY) return;
+  const px = x * cs; const py = y * cs;
+
+  ctx.save();
+  ctx.translate(px, py);
+
+  switch (type) {
+    case T.WALL:
+    case T.DARK_WALL:
+      drawWall(type, cs);
+      break;
+
+    case T.BOX: {
+      const gb = ctx.createLinearGradient(0, 0, cs, cs);
+      gb.addColorStop(0, '#92400e'); gb.addColorStop(1, '#451a03');
+      ctx.fillStyle = gb; roundRect(ctx, 2, 2, cs - 4, cs - 4, 4); ctx.fill();
+      ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5; roundRect(ctx, 2, 2, cs - 4, cs - 4, 4); ctx.stroke();
+      break;
+    }
+    case T.KEY: {
+      const pulse = Math.sin(time * 0.1) * 0.1 + 1;
+      ctx.translate(cs*0.5, cs*0.5); ctx.scale(pulse, pulse); ctx.translate(-cs*0.5, -cs*0.5);
+      ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(cs*0.4, cs*0.45, cs*0.15, 0, Math.PI*2); ctx.fill();
+      ctx.fillRect(cs*0.5, cs*0.4, cs*0.3, cs*0.1);
+      break;
+    }
+    case T.DOOR: {
+      const isCleared = (appMode === 'PLAY' && state.hasKey);
+      ctx.fillStyle = isCleared ? '#4ade80' : '#b45309';
+      roundRect(ctx, 4, 2, cs - 8, cs - 4, 4); ctx.fill();
+      ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1.5; roundRect(ctx, 4, 2, cs - 8, cs - 4, 4); ctx.stroke();
+      break;
+    }
+    case T.SPIKE: {
+      ctx.fillStyle = '#ef4444';
+      for (let i = 0; i < 3; i++) {
+        const bx = cs * (i + 0.5) / 3;
+        ctx.beginPath(); ctx.moveTo(bx - cs * 0.12, cs - 2); ctx.lineTo(bx, cs * 0.2); ctx.lineTo(bx + cs * 0.12, cs - 2); ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case T.ICE: {
+      const gi = ctx.createLinearGradient(0, 0, cs, cs);
+      gi.addColorStop(0, '#e0f2fe'); gi.addColorStop(1, '#7dd3fc');
+      ctx.fillStyle = gi; ctx.fillRect(0, cs - 6, cs, 6);
+      break;
+    }
+    case T.GOAL: {
+      ctx.font = `${cs * 0.5}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('⭐', cs * 0.5, cs * 0.5);
+      break;
+    }
+    case T.PLAYER:
+      drawPlayer(cs);
+      break;
+  }
+  ctx.restore();
+}
+
+function drawPlayer(cs) {
+  const bob = Math.sin(time * 0.12) * 1.5;
+  ctx.save();
+  ctx.translate(cs / 2, cs / 2);
+  const targetRot = appMode === 'PLAY' ? { DOWN: 0, RIGHT: -Math.PI / 2, UP: Math.PI, LEFT: Math.PI / 2 }[state.gravity] : 0;
+  playerRotation += (targetRot - playerRotation) * 0.2;
+  ctx.rotate(playerRotation);
+  ctx.translate(-cs / 2, -cs / 2);
+
+  ctx.fillStyle = '#dc2626'; roundRect(ctx, cs * 0.25, cs * 0.3 + bob, cs * 0.5, cs * 0.5, 6); ctx.fill();
+  ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(cs * 0.5, cs * 0.3 + bob, cs * 0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1e0d2e'; ctx.fillRect(cs * 0.42, cs * 0.26 + bob, 2, 2); ctx.fillRect(cs * 0.54, cs * 0.26 + bob, 2, 2);
+
+  if (appMode === 'PLAY' && state.hasKey) {
+    ctx.font = `${cs * 0.3}px sans-serif`; ctx.fillText('🔑', cs * 0.7, cs * 0.2 + bob);
+  }
+  ctx.restore();
+}
+
+// ================================================================
+//  壁描画システム
+// ================================================================
+function drawWall(type, cs) {
+  const dark = (type === T.DARK_WALL);
+  switch(currentThemeIdx) {
+    case 0: drawForestWall(cs, dark); break;
+    case 1: drawTowerWall(cs, dark); break;
+    case 2: drawCandyWall(cs, dark); break;
+    case 3: drawPalaceWall(cs, dark); break;
+    case 4: drawIceWall(cs, dark); break;
+  }
+}
+
+function drawForestWall(cs, dark) {
+  const g = ctx.createLinearGradient(0,0,0,cs);
+  g.addColorStop(0, dark ? "#5a3d24" : "#8c6239"); g.addColorStop(1, dark ? "#352012" : "#5f3d22");
+  ctx.fillStyle = g; ctx.fillRect(0,0,cs,cs);
+  ctx.strokeStyle = dark ? "#26160d" : "#3f2614"; ctx.strokeRect(0,0,cs,cs);
+  ctx.fillStyle = dark ? "#3bbf6b" : "#67f29c";
+  [[0.1,0,0.1],[0.4,0,0.12],[0.8,0,0.1]].forEach(m=>{
+    ctx.beginPath(); ctx.arc(cs*m[0], cs*m[1], cs*m[2], Math.PI, 0); ctx.fill();
+  });
+}
+function drawTowerWall(cs, dark) {
+  const g = ctx.createLinearGradient(0,0,0,cs);
+  g.addColorStop(0, dark ? "#4b3a68" : "#9f95b8"); g.addColorStop(1, dark ? "#241933" : "#6f6488");
+  ctx.fillStyle = g; ctx.fillRect(0,0,cs,cs);
+  ctx.strokeStyle = dark ? "#1a1324" : "#4c445f";
+  for(let i=0; i<3; i++) { ctx.strokeRect(0, i*(cs/3), cs, cs/3); }
+}
+function drawCandyWall(cs, dark) {
+  const g = ctx.createLinearGradient(0,0,0,cs);
+  g.addColorStop(0, dark ? "#8b5a2b" : "#d8a56a"); g.addColorStop(1, dark ? "#4a2a10" : "#b97a3d");
+  ctx.fillStyle = g; ctx.fillRect(0,0,cs,cs);
+  ctx.fillStyle = "#4a2511"; [[0.2,0.2],[0.7,0.3],[0.4,0.7]].forEach(ch=>{
+    ctx.beginPath(); ctx.arc(cs*ch[0], cs*ch[1], cs*0.04, 0, Math.PI*2); ctx.fill();
+  });
+}
+function drawPalaceWall(cs, dark) {
+  const g = ctx.createLinearGradient(0,0,cs,cs);
+  g.addColorStop(0, dark ? "#6a738c" : "#f3f6ff"); g.addColorStop(1, dark ? "#3a4154" : "#d8ddea");
+  ctx.fillStyle = g; ctx.fillRect(0,0,cs,cs);
+  ctx.strokeStyle = dark ? "#b8860b" : "#ffd700"; ctx.lineWidth = 2; ctx.strokeRect(4,4,cs-8,cs-8); ctx.lineWidth = 1;
+}
+function drawIceWall(cs, dark) {
+  const g = ctx.createLinearGradient(0,0,cs,cs);
+  g.addColorStop(0, dark ? "#3b82f6" : "#e0f2fe"); g.addColorStop(1, dark ? "#0f172a" : "#7dd3fc");
+  ctx.fillStyle = g; ctx.fillRect(0,0,cs,cs);
+  ctx.strokeStyle = dark ? "#60a5fa" : "#ffffff"; ctx.strokeRect(0,0,cs,cs);
+  ctx.fillStyle = "rgba(255,255,255,0.2)"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(cs * 0.6, 0); ctx.lineTo(0, cs * 0.6); ctx.fill();
+}
+</script>
+</body>
+</html>
