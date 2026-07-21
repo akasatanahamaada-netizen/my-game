@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>白紙の本 - 重力反転プロトタイプ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Zen+Old+Mincho:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --parchment: #e8dcc0;
+    --parchment-dark: #d9c9a3;
+    --ink: #2b2e4a;
+    --ink-soft: #4a4e6d;
+    --gold: #b08d57;
+    --moss: #57644a;
+    --rose: #8b5e63;
+    --spine: #3a3226;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: radial-gradient(ellipse at center, #3a3226 0%, #201b14 100%);
+    display:flex; align-items:flex-start; justify-content:center;
+    font-family:'Zen Old Mincho', serif;
+    overflow-y:auto;
+    overflow-x:hidden;
+  }
+  .stage{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    width:100%;
+    max-width:940px;
+    padding:16px 8px 24px 8px;
+  }
+  h1{
+    font-family:'Cormorant Garamond', serif;
+    font-weight:700;
+    letter-spacing:0.12em;
+    color:#e8dcc0;
+    font-size:26px;
+    margin:0;
+    text-align:center;
+  }
+  .sub{
+    color:#b7ab8a;
+    font-size:13px;
+    letter-spacing:0.05em;
+    margin-top:-8px;
+  }
+  .book-frame{
+    position:relative;
+    border-radius:6px;
+    padding:14px;
+    background:linear-gradient(180deg,#4a3f2c,#2b2418);
+    box-shadow:
+      0 30px 60px rgba(0,0,0,0.55),
+      0 2px 0 rgba(255,255,255,0.04) inset;
+    width:100%;
+    max-width:912px;
+  }
+  canvas{
+    display:block;
+    border-radius:3px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+    width:100%;
+    height:auto;
+    aspect-ratio: 900 / 480;
+  }
+  .hud{
+    display:flex; justify-content:space-between;
+    width:100%;
+    padding:6px 4px 0 4px;
+    font-size:12px;
+    color:#cbb98f;
+    letter-spacing:0.05em;
+  }
+  .controls{
+    display:flex; gap:18px; margin-top:2px;
+    color:#a99a76;
+    font-size:12px;
+    letter-spacing:0.03em;
+  }
+  .controls b{ color:#e8dcc0; }
+  .touch-ui{
+    display:flex; justify-content:space-between; width:100%;
+    margin-top:6px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .touch-group{ display:flex; gap:8px; }
+  .btn{
+    width:52px; height:52px;
+    border-radius:50%;
+    border:1px solid rgba(232,220,192,0.35);
+    background:rgba(232,220,192,0.08);
+    color:#e8dcc0;
+    font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none;
+    touch-action:none;
+  }
+  .btn:active{ background:rgba(232,220,192,0.25); }
+  .btn.flip{
+    width:auto; height:52px; padding:0 18px; border-radius:26px;
+    background:rgba(176,141,87,0.18);
+    border-color:rgba(176,141,87,0.6);
+    font-size:13px;
+    letter-spacing:0.05em;
+  }
+  #hudStage{
+    color:#e8dcc0;
+    font-weight:700;
+    letter-spacing:0.08em;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div>
+    <h1>白紙の本 — 重力反転プロトタイプ</h1>
+    <div class="sub">1見開き＝1ステージ ／ 栞（しおり）に触れると次の見開きへ ／ 左右の足場配置はページごとに異なる</div>
+  </div>
+
+  <div class="book-frame">
+    <div class="hud">
+      <span id="hudLeft">← 左ページ：通常重力</span>
+      <span id="hudStage">見開き 1 / 1</span>
+      <span id="hudRight">右ページ：通常重力 →</span>
+    </div>
+    <canvas id="game" width="900" height="480"></canvas>
+    <div class="controls">
+      <span><b>← →</b> 移動</span>
+      <span><b>↑ / W</b> ジャンプ</span>
+      <span><b>F / Space</b> 今いるページの重力を反転</span>
+      <span>栞（しおり）に触れると次の見開きへ</span>
+    </div>
+    <div class="touch-ui">
+      <div class="touch-group">
+        <div class="btn" id="btnLeft">◀</div>
+        <div class="btn" id="btnRight">▶</div>
+      </div>
+      <div class="btn flip" id="btnFlip">本を<br>ひっくり返す</div>
+      <div class="touch-group">
+        <div class="btn" id="btnJump">▲</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const SPINE = W / 2;
+
+// ---------- paper texture (rendered once to offscreen) ----------
+const paper = document.createElement('canvas');
+paper.width = W; paper.height = H;
+const pctx = paper.getContext('2d');
+(function drawPaper(){
+  const grad = pctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#efe4c8');
+  grad.addColorStop(1,'#e2d3ab');
+  pctx.fillStyle = grad;
+  pctx.fillRect(0,0,W,H);
+  // subtle grain
+  for(let i=0;i<2200;i++){
+    const x = Math.random()*W, y = Math.random()*H;
+    const a = Math.random()*0.05;
+    pctx.fillStyle = Math.random() > 0.5 ? `rgba(120,100,60,${a})` : `rgba(255,250,230,${a})`;
+    pctx.fillRect(x,y,1.4,1.4);
+  }
+  // vignette
+  const vg = pctx.createRadialGradient(W/2,H/2,H*0.25,W/2,H/2,H*0.9);
+  vg.addColorStop(0,'rgba(0,0,0,0)');
+  vg.addColorStop(1,'rgba(58,50,38,0.25)');
+  pctx.fillStyle = vg;
+  pctx.fillRect(0,0,W,H);
+})();
+
+// ---------- world ----------
+const GRAVITY = 2200;      // px/s^2
+const ACCEL = 3400;
+const FRICTION = 3000;
+const MAX_SPEED = 300;
+const JUMP_SPEED = 720;
+
+let gravity = { left: 1, right: 1 }; // 1 = normal(down), -1 = inverted(up)
+
+const EDGE = 16; // 本のふち（外周）の厚み。ここが床・天井・壁になる
+
+// 本のふち（外周）＝奈落ではなく、床・天井・壁として当たり判定を持つ（全ステージ共通）
+const edges = [
+  // 左ページ：上端＝天井、下端＝床、左端（外側）＝壁。ノド側（右端）は壁にしない
+  { page:'left', x:0, y:0,       w:SPINE, h:EDGE, kind:'ceilingEdge' },
+  { page:'left', x:0, y:H-EDGE,  w:SPINE, h:EDGE, kind:'floorEdge' },
+  { page:'left', x:0, y:0,       w:EDGE,  h:H,    kind:'wallEdge' },
+
+  // 右ページ：上端＝天井、下端＝床、右端（外側）＝壁。ノド側（左端）は壁にしない
+  { page:'right', x:SPINE, y:0,      w:SPINE, h:EDGE, kind:'ceilingEdge' },
+  { page:'right', x:SPINE, y:H-EDGE, w:SPINE, h:EDGE, kind:'floorEdge' },
+  { page:'right', x:W-EDGE, y:0,     w:EDGE,  h:H,    kind:'wallEdge' },
+];
+
+const player = {
+  x: 60, y: H-EDGE-34, w: 26, h: 34,
+  vx: 0, vy: 0,
+  onGround: false,
+  facing: 1,
+  squash: 1, // for landing squash/stretch
+};
+
+// 敵の移動速度（プレイヤーが同じページにいる間だけ徘徊し、いない間はその場で静止する）
+const ENEMY_SPEED = 90; // px/s, patrol speed while active
+
+// ---------- stages ----------
+// 各見開き（ステージ）ごとに、左右で違う配置の足場を用意する（左右対称にならないように意図的にズラす）。
+// 足場に kind:'ceilingLedge' を使うと、そのページの重力を反転させたときだけ「天井が床になって」乗れる。
+// goal は栞（しおり）オブジェクト。プレイヤーが触れると見開きクリア→次のステージへ。
+const STAGES = [
+  {
+    name: '序章：白紙の本',
+    platforms: [
+      // 左ページ：低めの足場ひとつ＋反転が必要な天井の足場
+      { page:'left',  x:140, y:330, w:130, h:20, kind:'ledge' },
+      { page:'left',  x:270, y:80,  w:150, h:20, kind:'ceilingLedge' },
+      // 右ページ：段違いの2段の足場＋高い位置の反転足場（左とは高さも数も違う）
+      { page:'right', x:480, y:360, w:110, h:20, kind:'ledge' },
+      { page:'right', x:640, y:250, w:110, h:20, kind:'ledge' },
+      { page:'right', x:770, y:80,  w:90,  h:20, kind:'ceilingLedge' },
+    ],
+    boxes: [ { x:380, y:H-EDGE-30, w:32, h:32 } ],
+    enemies: [
+      { page:'left',  x:200, y:H-EDGE-24, w:26, h:22, dir:1 },
+      { page:'right', x:600, y:H-EDGE-24, w:26, h:22, dir:-1 },
+    ],
+    goal: { page:'right', x:800, y:100, w:26, h:26 }, // 右の天井足場の下（反転してたどり着く）
+  },
+  {
+    name: '第1章：赤ずきん（見開き1）',
+    platforms: [
+      // 左ページ：登り階段状の3段＋その先の反転足場（ゴールはここ）
+      { page:'left', x:60,  y:380, w:90,  h:20, kind:'ledge' },
+      { page:'left', x:190, y:290, w:90,  h:20, kind:'ledge' },
+      { page:'left', x:320, y:190, w:100, h:20, kind:'ledge' },
+      { page:'left', x:150, y:70,  w:170, h:20, kind:'ceilingLedge' },
+      // 右ページ：低い足場ひとつ＋その先に浮かぶ幅広の足場（階段ではなく一段ジャンプ）
+      { page:'right', x:520, y:330, w:110, h:20, kind:'ledge' },
+      { page:'right', x:640, y:200, w:200, h:20, kind:'ledge' },
+    ],
+    boxes: [ { x:700, y:H-EDGE-30, w:32, h:32 } ],
+    enemies: [
+      { page:'left',  x:100, y:H-EDGE-24, w:26, h:22, dir:1 },
+      { page:'right', x:600, y:H-EDGE-24, w:26, h:22, dir:-1 },
+    ],
+    goal: { page:'left', x:210, y:90, w:26, h:26 }, // 左の天井足場の下（反転してたどり着く）
+  },
+  {
+    name: '第1章：赤ずきん（見開き2）',
+    platforms: [
+      // 左ページ：足場ひとつ＋反転足場
+      { page:'left', x:100, y:350, w:110, h:20, kind:'ledge' },
+      { page:'left', x:250, y:80,  w:150, h:20, kind:'ceilingLedge' },
+      // 右ページ：段違いの2段＋高所の反転足場（ゴール）。左とは段数も高さも違う配置
+      { page:'right', x:520, y:300, w:100, h:20, kind:'ledge' },
+      { page:'right', x:650, y:150, w:100, h:20, kind:'ledge' },
+      { page:'right', x:780, y:70,  w:90,  h:20, kind:'ceilingLedge' },
+    ],
+    boxes: [ { x:400, y:H-EDGE-30, w:32, h:32 } ],
+    enemies: [
+      { page:'left',  x:180, y:H-EDGE-24, w:26, h:22, dir:-1 },
+      { page:'right', x:560, y:H-EDGE-24, w:26, h:22, dir:1 },
+    ],
+    goal: { page:'right', x:800, y:90, w:26, h:26 },
+  },
+];
+
+let platforms, boxes, enemies, goal;
+let currentStageIndex = 0;
+let clearing = false, clearT = 0;
+let goalPulse = 0;
+
+function loadStage(idx){
+  const stage = STAGES[idx];
+  gravity = { left:1, right:1 };
+
+  platforms = edges.concat(stage.platforms.map(p => ({ ...p })));
+
+  boxes = stage.boxes.map(b => ({
+    x:b.x, y:b.y, w:b.w, h:b.h, vx:0, vy:0, onGround:false, squash:1
+  }));
+
+  enemies = stage.enemies.map(e => ({
+    page:e.page, x:e.x, y:e.y, w:e.w, h:e.h, dir:e.dir,
+    // 徘徊範囲はページ全体（外壁からノドまで）。ノドは越えない。
+    minX: e.page === 'left' ? EDGE : SPINE,
+    maxX: e.page === 'left' ? SPINE : (W - EDGE),
+    vy:0, onGround:false, alive:true, squash:1, deathT:0,
+  }));
+
+  goal = { page: stage.goal.page, x:stage.goal.x, y:stage.goal.y, w:stage.goal.w, h:stage.goal.h };
+
+  player.x = 60; player.y = H-EDGE-34;
+  player.vx = 0; player.vy = 0; player.squash = 1;
+
+  clearing = false; clearT = 0;
+  flashPage.left = 0; flashPage.right = 0;
+
+  updateHud();
+  document.getElementById('hudStage').textContent =
+    `見開き ${idx+1} / ${STAGES.length} ： ${stage.name}`;
+}
+
+function pageOf(entity){ return (entity.x + entity.w/2) < SPINE ? 'left' : 'right'; }
+
+function killEnemy(en){
+  if(!en.alive) return;
+  en.alive = false;
+  en.squash = 0.18; // flattened
+  en.vy = 0;
+  en.deathT = 0;
+}
+
+let hurtFlash = 0;
+let invincible = 0; // brief grace period after respawn so touching the enemy doesn't loop forever
+function respawnPlayer(){
+  player.x = 60; player.y = H-EDGE-34;
+  player.vx = 0; player.vy = 0;
+  player.squash = 0.6;
+  hurtFlash = 1;
+  invincible = 1.0;
+}
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if(e.key === 'f' || e.key === 'F' || e.code === 'Space'){ flipCurrentPage(); e.preventDefault(); }
+});
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+function currentPage(){ return (player.x + player.w/2) < SPINE ? 'left' : 'right'; }
+
+function flipCurrentPage(){
+  const p = currentPage();
+  gravity[p] *= -1;
+  flashPage[p] = 1;
+  updateHud();
+}
+const flashPage = { left:0, right:0 };
+
+function updateHud(){
+  document.getElementById('hudLeft').textContent =
+    '← 左ページ：' + (gravity.left === 1 ? '通常重力' : '反転（天井が床）');
+  document.getElementById('hudRight').textContent =
+    '右ページ：' + (gravity.right === 1 ? '通常重力' : '反転（天井が床）') + ' →';
+}
+
+loadStage(0); // 最初の見開きを読み込む（platforms/boxes/enemies/goal をここで初期化する）
+
+// touch buttons
+function bindHold(id, onDown, onUp){
+  const el = document.getElementById(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); onDown(); });
+  el.addEventListener('pointerup', e => onUp && onUp());
+  el.addEventListener('pointerleave', e => onUp && onUp());
+}
+bindHold('btnLeft', ()=>keys['ArrowLeft']=true, ()=>keys['ArrowLeft']=false);
+bindHold('btnRight', ()=>keys['ArrowRight']=true, ()=>keys['ArrowRight']=false);
+bindHold('btnJump', ()=>keys['ArrowUp']=true, ()=>keys['ArrowUp']=false);
+document.getElementById('btnFlip').addEventListener('pointerdown', e=>{ e.preventDefault(); flipCurrentPage(); });
+
+// ---------- physics ----------
+function rectsOverlap(a,b){
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function pagePlatforms(page){
+  return platforms.filter(p => p.page === page);
+}
+
+let lastTime = performance.now();
+function loop(now){
+  let dt = (now - lastTime) / 1000;
+  dt = Math.min(dt, 1/30);
+  lastTime = now;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+function update(dt){
+  goalPulse += dt;
+
+  // 栞（しおり）に触れてクリアした直後：短い演出の間だけ操作を止め、終わったら次の見開きへ
+  if(clearing){
+    clearT += dt;
+    if(clearT > 1.1){
+      currentStageIndex = (currentStageIndex + 1) % STAGES.length;
+      loadStage(currentStageIndex);
+    }
+    return;
+  }
+
+  const page = currentPage();
+  const g = gravity[page];
+
+  // horizontal input (smooth accel / friction, not grid based)
+  const left = keys['ArrowLeft'] || keys['a'] || keys['A'];
+  const right = keys['ArrowRight'] || keys['d'] || keys['D'];
+  if(left && !right){
+    player.vx -= ACCEL * dt;
+    player.facing = -1;
+  } else if(right && !left){
+    player.vx += ACCEL * dt;
+    player.facing = 1;
+  } else {
+    const decel = FRICTION * dt;
+    if(Math.abs(player.vx) <= decel) player.vx = 0;
+    else player.vx -= Math.sign(player.vx) * decel;
+  }
+  player.vx = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, player.vx));
+
+  // gravity (direction depends on the page the player currently occupies)
+  player.vy += GRAVITY * g * dt;
+
+  // jump (against current gravity direction)
+  const jumpPressed = keys['ArrowUp'] || keys['w'] || keys['W'];
+  if(jumpPressed && player.onGround){
+    player.vy = -JUMP_SPEED * g;
+    player.onGround = false;
+  }
+
+  // --- boxes: gravity always follows the page the box currently sits in ---
+  for(const box of boxes){
+    const bg = gravity[pageOf(box)];
+    box.vy += GRAVITY * bg * dt;
+    const decel = FRICTION * dt;
+    if(Math.abs(box.vx) <= decel) box.vx = 0;
+    else box.vx -= Math.sign(box.vx) * decel;
+    box.vx = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, box.vx));
+  }
+
+  // integrate player X tentatively, then push any overlapping box by the same amount
+  const prevX = player.x;
+  player.x += player.vx * dt;
+  const dx = player.x - prevX;
+  if(dx !== 0){
+    for(const box of boxes){
+      if(rectsOverlap(player, box)){
+        box.x += dx;
+        box.vx = player.vx; // box carries the player's push speed (visual "shove")
+      }
+    }
+  }
+
+  // boxes resolve their own X collision against the platforms/edges of whichever page they're now on
+  for(const box of boxes){
+    resolveBodyCollisions(box, 'x', pagePlatforms(pageOf(box)));
+  }
+  // player resolves X against its own page's platforms AND the (now possibly moved/blocked) boxes
+  resolveBodyCollisions(player, 'x', pagePlatforms(page).concat(boxes));
+
+  // --- enemies: patrol only while the player is on their page; otherwise they hold still ---
+  for(const en of enemies){
+    if(!en.alive){
+      en.deathT += dt;
+      en.squash += (1 - en.squash) * Math.min(1, dt*4); // slowly relax the squash, but stays flat-ish
+      continue;
+    }
+    const active = (en.page === currentPage()); // 主人公が同じページにいる時だけ動く
+    const eg = gravity[en.page];
+
+    if(active){
+      en.x += en.dir * ENEMY_SPEED * dt;
+      if(en.x < en.minX){ en.x = en.minX; en.dir = 1; }
+      if(en.x + en.w > en.maxX){ en.x = en.maxX - en.w; en.dir = -1; }
+    }
+    // gravity/physics keep running even while "asleep", so it still rests correctly on the floor/ceiling
+    en.vy += GRAVITY * eg * dt;
+    en.y += en.vy * dt;
+    en.onGround = false;
+    resolveBodyCollisions(en, 'y', pagePlatforms(en.page));
+    en.squash += (1 - en.squash) * Math.min(1, dt*10);
+  }
+
+  // integrate boxes' Y (fall/rise according to their current page's gravity) and resolve
+  for(const box of boxes){
+    box.y += box.vy * dt;
+    box.onGround = false;
+    resolveBodyCollisions(box, 'y', pagePlatforms(pageOf(box)));
+    box.squash += (1 - box.squash) * Math.min(1, dt*10);
+
+    // 箱が敵の上に落ちてきたら潰して倒す（それなりの速度で「落下してきた」場合のみ）
+    for(const en of enemies){
+      if(!en.alive || en.page !== pageOf(box)) continue;
+      const eg = gravity[en.page];
+      if(rectsOverlap(box, en) && box.vy * eg > 150){
+        killEnemy(en);
+        box.y = (eg === 1) ? en.y - box.h : en.y + en.h; // 潰れた敵の上に箱を着地させる
+        box.vy = 0; box.onGround = true; box.squash = 1.3;
+      }
+    }
+  }
+
+  // integrate player Y and resolve against platforms + boxes (player can stand on a box)
+  player.y += player.vy * dt;
+  player.onGround = false;
+  resolveBodyCollisions(player, 'y', pagePlatforms(page).concat(boxes));
+
+  // 生きている敵に触れたらリスポーン（横から踏んでも即アウト。倒すには上から箱を落とす必要がある）
+  if(invincible <= 0){
+    for(const en of enemies){
+      if(en.alive && rectsOverlap(player, en)){
+        respawnPlayer();
+        break;
+      }
+    }
+  }
+
+  // 栞（しおり＝ゴール）に触れたら見開きクリア→少し演出してから次のステージへ
+  if(rectsOverlap(player, goal)){
+    clearing = true;
+    clearT = 0;
+  }
+
+  // safety net only (the book's edges above are the real floor/wall/ceiling now)
+  player.x = Math.max(-40, Math.min(W + 40, player.x));
+  player.y = Math.max(-400, Math.min(H + 400, player.y));
+
+  // squash/stretch easing back to 1
+  player.squash += (1 - player.squash) * Math.min(1, dt*10);
+
+  flashPage.left = Math.max(0, flashPage.left - dt*2.2);
+  flashPage.right = Math.max(0, flashPage.right - dt*2.2);
+  hurtFlash = Math.max(0, hurtFlash - dt*2.5);
+  invincible = Math.max(0, invincible - dt);
+}
+
+function resolveBodyCollisions(body, axis, colliders){
+  for(const plat of colliders){
+    if(plat === body) continue;
+    if(!rectsOverlap(body, plat)) continue;
+    if(axis === 'x'){
+      if(body.vx > 0) body.x = plat.x - body.w;
+      else if(body.vx < 0) body.x = plat.x + plat.w;
+      body.vx = 0;
+    } else {
+      if(body.vy > 0){ // moving down, land on top
+        body.y = plat.y - body.h;
+        body.vy = 0;
+        body.onGround = true;
+        body.squash = 1.28;
+      } else if(body.vy < 0){ // moving up, hit underside
+        body.y = plat.y + plat.h;
+        body.vy = 0;
+        body.onGround = true;
+        body.squash = 1.28;
+      }
+    }
+  }
+}
+
+// ---------- render ----------
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function drawGravityIcon(cx, cy, dir, glow){
+  ctx.save();
+  ctx.translate(cx, cy);
+  if(glow > 0){
+    ctx.shadowColor = 'rgba(176,141,87,0.9)';
+    ctx.shadowBlur = 14*glow;
+  }
+  ctx.strokeStyle = '#5a4a2e';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  if(dir === 1){
+    ctx.moveTo(0,-8); ctx.lineTo(0,8);
+    ctx.moveTo(-5,3); ctx.lineTo(0,8); ctx.lineTo(5,3);
+  } else {
+    ctx.moveTo(0,8); ctx.lineTo(0,-8);
+    ctx.moveTo(-5,-3); ctx.lineTo(0,-8); ctx.lineTo(5,-3);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPlayer(){
+  const page = currentPage();
+  const g = gravity[page];
+  ctx.save();
+  if(invincible > 0){
+    ctx.globalAlpha = (Math.floor(invincible*16) % 2 === 0) ? 0.4 : 1; // flicker while briefly immune
+  }
+  ctx.translate(player.x + player.w/2, player.y + player.h/2);
+  ctx.scale(player.facing, g); // flips upside-down smoothly with gravity, mirrors with facing
+  const sx = player.squash;
+  const sy = 2 - player.squash;
+
+  // ink-blob body
+  ctx.beginPath();
+  ctx.fillStyle = '#2b2e4a';
+  const hw = (player.w/2) * sx, hh = (player.h/2) * sy;
+  roundRectPath(-hw, -hh, hw*2, hh*2, 9);
+  ctx.fill();
+
+  // little hair tuft (indicates "up" so gravity flip reads clearly)
+  ctx.fillStyle = '#b08d57';
+  ctx.beginPath();
+  ctx.moveTo(-4, -hh);
+  ctx.lineTo(0, -hh-9);
+  ctx.lineTo(4, -hh);
+  ctx.closePath();
+  ctx.fill();
+
+  // face
+  ctx.fillStyle = '#e8dcc0';
+  ctx.beginPath();
+  ctx.arc(-5, -2, 2.4, 0, Math.PI*2);
+  ctx.arc(5, -2, 2.4, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+function roundRectPath(x,y,w,h,r){
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function drawPageEdges(){
+  ctx.save();
+  const T = 22; // 縁の視覚的な厚み(グラデーション幅)
+
+  function edgeBand(x,y,w,h,gx0,gy0,gx1,gy1,color){
+    const g = ctx.createLinearGradient(gx0,gy0,gx1,gy1);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(58,50,38,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x,y,w,h);
+  }
+
+  // 床（下端）：苔色の帯
+  edgeBand(0,H-T,W,T, 0,H,0,H-T, 'rgba(87,100,74,0.5)');
+  // 天井（上端）：藍色の帯
+  edgeBand(0,0,W,T, 0,0,0,T, 'rgba(43,46,74,0.4)');
+  // 外壁（左端／右端）：金色の帯
+  edgeBand(0,0,T,H, 0,0,T,0, 'rgba(176,141,87,0.35)');
+  edgeBand(W-T,0,T,H, W,0,W-T,0, 'rgba(176,141,87,0.35)');
+
+  // 実際の当たり判定ライン（紙の縁そのもの）をくっきり描く
+  ctx.strokeStyle = 'rgba(58,50,38,0.6)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  // 左ページ：上・下・外側(左)。ノド側は壁にしないので線を引かない
+  ctx.beginPath();
+  ctx.moveTo(EDGE, EDGE); ctx.lineTo(SPINE, EDGE);
+  ctx.moveTo(EDGE, H-EDGE); ctx.lineTo(SPINE, H-EDGE);
+  ctx.moveTo(EDGE, EDGE); ctx.lineTo(EDGE, H-EDGE);
+  ctx.stroke();
+  // 右ページ：上・下・外側(右)
+  ctx.beginPath();
+  ctx.moveTo(SPINE, EDGE); ctx.lineTo(W-EDGE, EDGE);
+  ctx.moveTo(SPINE, H-EDGE); ctx.lineTo(W-EDGE, H-EDGE);
+  ctx.moveTo(W-EDGE, EDGE); ctx.lineTo(W-EDGE, H-EDGE);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawEnemy(en){
+  const eg = gravity[en.page];
+  ctx.save();
+  const sx = en.squash, sy = 2 - en.squash;
+  const hw = (en.w/2) * sx, hh = (en.h/2) * sy;
+  const cx = en.x + en.w/2, cy = en.y + en.h/2;
+  ctx.translate(cx, cy);
+  ctx.scale(en.dir >= 0 ? 1 : -1, eg); // faces travel direction, flips with page gravity
+
+  if(!en.alive){
+    // 潰れて平たくなった残骸
+    ctx.globalAlpha = Math.max(0.25, 1 - en.deathT*0.6);
+    ctx.beginPath();
+    roundRectPath(-hw*1.3, -hh*0.35, hw*2.6, hh*0.7, 5);
+    ctx.fillStyle = '#4a4e6d';
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  // ink-wolf body
+  ctx.beginPath();
+  roundRectPath(-hw, -hh, hw*2, hh*2, 7);
+  ctx.fillStyle = '#3a2f2a';
+  ctx.fill();
+
+  // ears
+  ctx.fillStyle = '#3a2f2a';
+  ctx.beginPath();
+  ctx.moveTo(hw-6, -hh);
+  ctx.lineTo(hw-2, -hh-8);
+  ctx.lineTo(hw+2, -hh);
+  ctx.closePath();
+  ctx.fill();
+
+  // eyes (glowing, always facing forward regardless of gravity flip)
+  ctx.fillStyle = '#c9503f';
+  ctx.beginPath();
+  ctx.arc(hw-8, -2, 2.2, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(paper,0,0);
+
+  // page tint (very subtle, to distinguish left/right without looking like blocks)
+  ctx.fillStyle = 'rgba(87,100,74,0.05)';
+  ctx.fillRect(0,0,SPINE,H);
+  ctx.fillStyle = 'rgba(139,94,99,0.05)';
+  ctx.fillRect(SPINE,0,SPINE,H);
+
+  // inverted-gravity tint sweep
+  if(gravity.left === -1){ ctx.fillStyle='rgba(43,46,74,0.06)'; ctx.fillRect(0,0,SPINE,H); }
+  if(gravity.right === -1){ ctx.fillStyle='rgba(43,46,74,0.06)'; ctx.fillRect(SPINE,0,SPINE,H); }
+
+  // spine (book gutter)
+  const spineGrad = ctx.createLinearGradient(SPINE-16,0,SPINE+16,0);
+  spineGrad.addColorStop(0,'rgba(58,50,38,0)');
+  spineGrad.addColorStop(0.5,'rgba(58,50,38,0.35)');
+  spineGrad.addColorStop(1,'rgba(58,50,38,0)');
+  ctx.fillStyle = spineGrad;
+  ctx.fillRect(SPINE-16,0,32,H);
+
+  // 本のふち（床・天井・壁）を紙の縁として描画
+  drawPageEdges();
+
+  // puzzle platforms (ledges) — the book's edges are drawn separately above
+  for(const plat of platforms){
+    if(plat.kind !== 'ledge' && plat.kind !== 'ceilingLedge') continue;
+    const inv = gravity[plat.page] === -1;
+    ctx.save();
+    roundRect(plat.x, plat.y, plat.w, plat.h, 9);
+    ctx.fillStyle = '#6b5b46';
+    ctx.fill();
+    // top highlight edge, flips side visually when page is inverted
+    ctx.fillStyle = 'rgba(232,220,192,0.28)';
+    if(!inv) ctx.fillRect(plat.x+4, plat.y+2, plat.w-8, 3);
+    else ctx.fillRect(plat.x+4, plat.y+plat.h-5, plat.w-8, 3);
+    ctx.restore();
+  }
+
+  // gravity icons
+  drawGravityIcon(SPINE/2, 20, gravity.left, flashPage.left);
+  drawGravityIcon(SPINE + SPINE/2, 20, gravity.right, flashPage.right);
+
+  // 栞（しおり＝ゴール）
+  drawGoal();
+
+  // pushable boxes
+  for(const box of boxes) drawBox(box);
+
+  // enemies
+  for(const en of enemies) drawEnemy(en);
+
+  drawPlayer();
+
+  // hurt flash (touched an enemy)
+  if(hurtFlash > 0){
+    ctx.fillStyle = `rgba(139,20,20,${hurtFlash*0.35})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // stage-clear transition (page turning) overlay
+  if(clearing){
+    const t = Math.min(1, clearT / 1.1);
+    const fade = t < 0.5 ? (t/0.5) : (1 - (t-0.5)/0.5); // fade in then out
+    ctx.save();
+    ctx.fillStyle = `rgba(232,220,192,${0.55*fade})`;
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = `rgba(43,46,74,${0.9*fade})`;
+    ctx.font = "600 26px 'Zen Old Mincho', serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('見開きクリア ― ページをめくっています…', W/2, H/2);
+    ctx.restore();
+  }
+}
+
+function drawGoal(){
+  const g = gravity[goal.page];
+  const pulse = 0.5 + 0.5*Math.sin(goalPulse*3);
+  ctx.save();
+  ctx.translate(goal.x + goal.w/2, goal.y + goal.h/2);
+  ctx.scale(1, g); // ribbon dangles from whichever side is currently "down" on its page
+
+  // soft glow so it reads as the interactive goal, not just scenery
+  ctx.shadowColor = 'rgba(176,141,87,0.9)';
+  ctx.shadowBlur = 10 + 6*pulse;
+
+  // ribbon/bookmark shape: a small rectangle with a V-notch at the bottom
+  const hw = goal.w/2, hh = goal.h/2;
+  ctx.beginPath();
+  ctx.moveTo(-hw, -hh);
+  ctx.lineTo(hw, -hh);
+  ctx.lineTo(hw, hh);
+  ctx.lineTo(0, hh-6);
+  ctx.lineTo(-hw, hh);
+  ctx.closePath();
+  ctx.fillStyle = '#b08d57';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(58,50,38,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBox(box){
+  ctx.save();
+  const sx = box.squash, sy = 2 - box.squash;
+  const hw = (box.w/2) * sx, hh = (box.h/2) * sy;
+  const cx = box.x + box.w/2, cy = box.y + box.h/2;
+  ctx.translate(cx, cy);
+
+  ctx.beginPath();
+  roundRectPath(-hw, -hh, hw*2, hh*2, 6);
+  ctx.fillStyle = '#8b5e63';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(43,46,74,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // crate-like cross braces to read as a physical, pushable object
+  ctx.strokeStyle = 'rgba(232,220,192,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-hw+4, -hh+4); ctx.lineTo(hw-4, hh-4);
+  ctx.moveTo(hw-4, -hh+4); ctx.lineTo(-hw+4, hh-4);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
